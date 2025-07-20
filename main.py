@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from dbfread import DBF
 from dbf import Table, READ_WRITE
-from datetime import datetime
+from datetime import datetime, date
 import os
 
 # ================================
@@ -92,6 +92,22 @@ def parsear_fecha(fec):
                 continue
     return None
 
+def formatear_fecha(fecha):
+    """Devuelve la fecha en formato YYYY-MM-DD, o vacío si es inválida."""
+    if not fecha:
+        return ""
+    if isinstance(fecha, (datetime, date)):
+        return fecha.strftime("%Y-%m-%d")
+    if isinstance(fecha, str):
+        try:
+            return datetime.strptime(fecha.strip(), "%Y-%m-%d").strftime("%Y-%m-%d")
+        except:
+            try:
+                return datetime.strptime(fecha.strip(), "%d/%m/%Y").strftime("%Y-%m-%d")
+            except:
+                return ""
+    return ""
+
 # ================================
 # ENDPOINTS
 # ================================
@@ -104,7 +120,7 @@ def home():
         "descargar": "/descargar/historico → Descarga el archivo DBF"
     }
 
-# ✅ CORREGIDO: LEE TODO EL HISTÓRICO COMPLETO SIEMPRE
+# ✅ CORREGIDO: FECHAS NORMALIZADAS
 @app.get("/historico")
 def historico_json():
     try:
@@ -113,7 +129,9 @@ def historico_json():
 
         registros = []
         for r in DBF(HISTORICO_DBF, load=True, encoding="cp850"):
-            registros.append({k: v for k, v in r.items()})
+            fila = {k: v for k, v in r.items()}
+            fila["FECHA"] = formatear_fecha(fila.get("FECHA", ""))
+            registros.append(fila)
 
         return {"total": len(registros), "datos": registros}
 
@@ -199,3 +217,4 @@ def descargar_historico():
         media_type="application/octet-stream",
         filename=HISTORICO_DBF
     )
+
