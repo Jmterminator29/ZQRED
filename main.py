@@ -84,9 +84,10 @@ def parsear_fecha(fec):
     if isinstance(fec, datetime):
         return fec.date()
     if isinstance(fec, str):
-        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y%m%d"):
+        fec = fec.strip().replace(".", "-").replace("/", "-").replace(" ", "-")
+        for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%d-%m-%y", "%d/%m/%y", "%Y%m%d"):
             try:
-                return datetime.strptime(fec.strip(), fmt).date()
+                return datetime.strptime(fec, fmt).date()
             except:
                 continue
     return None
