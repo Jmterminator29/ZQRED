@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 from dbfread import DBF
 from dbf import Table, READ_WRITE
 from datetime import datetime
@@ -20,9 +19,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ✅ Servir HTML estático
-app.mount("/static", StaticFiles(directory="."), name="static")
-
 # ================================
 # ARCHIVOS DBF
 # ================================
@@ -32,10 +28,9 @@ ZETH70 = "ZETH70.DBF"
 ZETH70_EXT = "ZETH70_EXT.DBF"
 HISTORICO_DBF = "VENTAS_HISTORICO.DBF"
 
-# ✅ FECHA COMO TEXTO PARA EVITAR NULL
 CAMPOS_HISTORICO = (
     "EERR C(20);"
-    "FECHA C(20);"
+    "FECHA D;"
     "N_TICKET C(10);"
     "NOMBRES C(50);"
     "TIPO C(5);"
@@ -106,16 +101,24 @@ def home():
         "mensaje": "✅ API ZQRED funcionando correctamente",
         "usar_endpoint": "/historico → Devuelve datos guardados",
         "actualizar": "/reporte → Actualiza el histórico",
-        "descargar": "/descargar/historico → Descarga el archivo DBF",
-        "visualizar": "/static/index.html → Tabla en el navegador"
+        "descargar": "/descargar/historico → Descarga el archivo DBF"
     }
 
+# ✅ CORREGIDO: LEE TODO EL HISTÓRICO COMPLETO SIEMPRE
 @app.get("/historico")
 def historico_json():
-    if not os.path.exists(HISTORICO_DBF):
-        return {"total": 0, "datos": []}
-    datos = list(DBF(HISTORICO_DBF, load=True, encoding="cp850"))
-    return {"total": len(datos), "datos": datos}
+    try:
+        if not os.path.exists(HISTORICO_DBF):
+            return {"total": 0, "datos": []}
+
+        registros = []
+        for r in DBF(HISTORICO_DBF, load=True, encoding="cp850"):
+            registros.append({k: v for k, v in r.items()})
+
+        return {"total": len(registros), "datos": registros}
+
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/reporte")
 def generar_reporte():
@@ -136,7 +139,6 @@ def generar_reporte():
         cabeceras = {r["NUMCHK"]: r for r in DBF(ZETH50T, load=True, encoding="cp850")}
 
         nuevos_registros = []
-        fecha_inicio = datetime(2025, 3, 1).date()  # ✅ FILTRO: Marzo 2025
 
         for detalle in DBF(ZETH51T, encoding="cp850"):
             numchk = str(detalle.get("NUMCHK", "")).strip()
@@ -149,12 +151,7 @@ def generar_reporte():
             if not cab:
                 continue
 
-            # ✅ FECHA TOLERANTE: si no se puede leer, se guarda igual
-            fecchk_date = parsear_fecha(cab.get("FECCHK"))
-            if fecchk_date and fecchk_date < fecha_inicio:
-                continue
-
-            fecchk_str = str(fecchk_date) if fecchk_date else str(cab.get("FECCHK", "")).strip()
+            fecchk = parsear_fecha(cab.get("FECCHK"))
 
             prod_ext = productos_ext.get(pronum, {})
             cost_unit = obtener_costo_producto(pronum, productos)
@@ -164,7 +161,7 @@ def generar_reporte():
 
             nuevo = {
                 "EERR": prod_ext.get("EERR", ""),
-                "FECHA": fecchk_str,
+                "FECHA": fecchk,
                 "N_TICKET": numchk,
                 "NOMBRES": cab.get("CUSNAM", ""),
                 "TIPO": cab.get("TYPPAG", ""),
@@ -202,4 +199,3 @@ def descargar_historico():
         media_type="application/octet-stream",
         filename=HISTORICO_DBF
     )
-
