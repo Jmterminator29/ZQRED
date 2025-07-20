@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from dbfread import DBF
 from dbf import Table, READ_WRITE
 from datetime import datetime
@@ -19,6 +20,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ✅ Servir HTML estático (opcional)
+app.mount("/static", StaticFiles(directory="."), name="static")
+
 # ================================
 # ARCHIVOS DBF
 # ================================
@@ -31,7 +35,7 @@ HISTORICO_DBF = "VENTAS_HISTORICO.DBF"
 # ✅ FECHA COMO TEXTO PARA EVITAR NULL
 CAMPOS_HISTORICO = (
     "EERR C(20);"
-    "FECHA C(20);"  # <-- TEXTO, NUNCA NULL
+    "FECHA C(20);"
     "N_TICKET C(10);"
     "NOMBRES C(50);"
     "TIPO C(5);"
@@ -102,7 +106,8 @@ def home():
         "mensaje": "✅ API ZQRED funcionando correctamente",
         "usar_endpoint": "/historico → Devuelve datos guardados",
         "actualizar": "/reporte → Actualiza el histórico",
-        "descargar": "/descargar/historico → Descarga el archivo DBF"
+        "descargar": "/descargar/historico → Descarga el archivo DBF",
+        "visualizar": "/static/index.html → Tabla en el navegador"
     }
 
 @app.get("/historico")
@@ -131,6 +136,7 @@ def generar_reporte():
         cabeceras = {r["NUMCHK"]: r for r in DBF(ZETH50T, load=True, encoding="cp850")}
 
         nuevos_registros = []
+        fecha_inicio = datetime(2025, 3, 1).date()  # ✅ FILTRO: Marzo 2025
 
         for detalle in DBF(ZETH51T, encoding="cp850"):
             numchk = str(detalle.get("NUMCHK", "")).strip()
@@ -143,8 +149,12 @@ def generar_reporte():
             if not cab:
                 continue
 
-            # ✅ FECHA SIEMPRE COMO TEXTO
+            # ✅ FILTRAR SOLO FECHAS >= MARZO 2025
             fecchk_date = parsear_fecha(cab.get("FECCHK"))
+            if not fecchk_date or fecchk_date < fecha_inicio:
+                continue
+
+            # ✅ GUARDAR COMO TEXTO
             fecchk_str = str(fecchk_date) if fecchk_date else str(cab.get("FECCHK", "")).strip()
 
             prod_ext = productos_ext.get(pronum, {})
@@ -193,3 +203,4 @@ def descargar_historico():
         media_type="application/octet-stream",
         filename=HISTORICO_DBF
     )
+
