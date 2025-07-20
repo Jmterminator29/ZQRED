@@ -28,9 +28,10 @@ ZETH70 = "ZETH70.DBF"
 ZETH70_EXT = "ZETH70_EXT.DBF"
 HISTORICO_DBF = "VENTAS_HISTORICO.DBF"
 
+# ✅ FECHA COMO TEXTO PARA EVITAR NULL
 CAMPOS_HISTORICO = (
     "EERR C(20);"
-    "FECHA D;"
+    "FECHA C(20);"  # <-- TEXTO, NUNCA NULL
     "N_TICKET C(10);"
     "NOMBRES C(50);"
     "TIPO C(5);"
@@ -142,7 +143,9 @@ def generar_reporte():
             if not cab:
                 continue
 
-            fecchk = parsear_fecha(cab.get("FECCHK"))
+            # ✅ FECHA SIEMPRE COMO TEXTO
+            fecchk_date = parsear_fecha(cab.get("FECCHK"))
+            fecchk_str = str(fecchk_date) if fecchk_date else str(cab.get("FECCHK", "")).strip()
 
             prod_ext = productos_ext.get(pronum, {})
             cost_unit = obtener_costo_producto(pronum, productos)
@@ -152,7 +155,7 @@ def generar_reporte():
 
             nuevo = {
                 "EERR": prod_ext.get("EERR", ""),
-                "FECHA": fecchk,
+                "FECHA": fecchk_str,
                 "N_TICKET": numchk,
                 "NOMBRES": cab.get("CUSNAM", ""),
                 "TIPO": cab.get("TYPPAG", ""),
@@ -190,4 +193,3 @@ def descargar_historico():
         media_type="application/octet-stream",
         filename=HISTORICO_DBF
     )
-
