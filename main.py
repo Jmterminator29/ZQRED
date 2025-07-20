@@ -107,10 +107,27 @@ def home():
 
 @app.get("/historico")
 def historico_json():
-    if not os.path.exists(HISTORICO_DBF):
-        return {"total": 0, "datos": []}
-    datos = list(DBF(HISTORICO_DBF, load=True, encoding="cp850"))
-    return {"total": len(datos), "datos": datos}
+    try:
+        if not os.path.exists(HISTORICO_DBF):
+            return {"total": 0, "datos": []}
+
+        from dbf import Table
+        table = Table(HISTORICO_DBF, codepage="cp850")
+        table.open()
+        registros = []
+
+        for rec in table:
+            fila = {}
+            for field in table.field_names:
+                fila[field] = rec[field]
+            registros.append(fila)
+
+        table.close()
+        return {"total": len(registros), "datos": registros}
+
+    except Exception as e:
+        return {"error": str(e)}
+
 
 @app.get("/reporte")
 def generar_reporte():
