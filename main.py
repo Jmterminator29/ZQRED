@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from dbfread import DBF
 from dbf import Table, READ_WRITE
-from datetime import datetime, date
+from datetime import datetime
 import os
 
 # ================================
@@ -28,9 +28,10 @@ ZETH70 = "ZETH70.DBF"
 ZETH70_EXT = "ZETH70_EXT.DBF"
 HISTORICO_DBF = "VENTAS_HISTORICO.DBF"
 
+# ✅ FECHA COMO TEXTO PARA EVITAR NULL
 CAMPOS_HISTORICO = (
     "EERR C(20);"
-    "FECHA D;"
+    "FECHA C(20);"  # <-- TEXTO, NUNCA NULL
     "N_TICKET C(10);"
     "NOMBRES C(50);"
     "TIPO C(5);"
@@ -79,42 +80,18 @@ def obtener_costo_producto(pronum, productos):
     return 0.0
 
 def parsear_fecha(fec):
-    """Soporta fechas en formato dd/mm/yy como 19/07/25 y otros."""
     if not fec:
         return None
     if isinstance(fec, datetime):
         return fec.date()
     if isinstance(fec, str):
         fec = fec.strip().replace(".", "-").replace("/", "-").replace(" ", "-")
-        formatos = [
-            "%Y-%m-%d",  # 2025-07-19
-            "%d-%m-%Y",  # 19-07-2025
-            "%Y%m%d",    # 20250719
-            "%d-%m-%y",  # 19-07-25
-            "%d/%m/%y"   # 19/07/25 ✅ ahora soportado
-        ]
-        for fmt in formatos:
+        for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%d-%m-%y", "%d/%m/%y", "%Y%m%d"):
             try:
                 return datetime.strptime(fec, fmt).date()
             except:
                 continue
     return None
-
-def formatear_fecha(fecha):
-    """Devuelve la fecha en formato YYYY-MM-DD, o vacío si es inválida."""
-    if not fecha:
-        return ""
-    if isinstance(fecha, (datetime, date)):
-        return fecha.strftime("%Y-%m-%d")
-    if isinstance(fecha, str):
-        try:
-            return datetime.strptime(fecha.strip(), "%Y-%m-%d").strftime("%Y-%m-%d")
-        except:
-            try:
-                return datetime.strptime(fecha.strip(), "%d/%m/%Y").strftime("%Y-%m-%d")
-            except:
-                return ""
-    return ""
 
 # ================================
 # ENDPOINTS
@@ -130,21 +107,10 @@ def home():
 
 @app.get("/historico")
 def historico_json():
-    """Devuelve TODO el histórico completo, no solo las actualizaciones."""
-    try:
-        if not os.path.exists(HISTORICO_DBF):
-            return {"total": 0, "datos": []}
-
-        registros = []
-        for r in DBF(HISTORICO_DBF, load=True, encoding="cp850"):
-            fila = {k: v for k, v in r.items()}
-            fila["FECHA"] = formatear_fecha(fila.get("FECHA", ""))
-            registros.append(fila)
-
-        return {"total": len(registros), "datos": registros}
-
-    except Exception as e:
-        return {"error": str(e)}
+    if not os.path.exists(HISTORICO_DBF):
+        return {"total": 0, "datos": []}
+    datos = list(DBF(HISTORICO_DBF, load=True, encoding="cp850"))
+    return {"total": len(datos), "datos": datos}
 
 @app.get("/reporte")
 def generar_reporte():
@@ -177,21 +143,29 @@ def generar_reporte():
             if not cab:
                 continue
 
-            fecchk = parsear_fecha(cab.get("FECCHK"))
+            # ✅ FECHA SIEMPRE COMO TEXTO (tal cual llega)
+            fecchk_date = parsear_fecha(cab.get("FECCHK"))
+            fecchk_str = str(fecchk_date) if fecchk_date else str(cab.get("FECCHK", "")).strip()
+
+            prod_ext = productos_ext.get(pronum, {})
+            cost_unit = obtener_costo_producto(pronum, productos)
+
+            cant = float(detalle.get("QTYPRO", 0))
+            p_unit = float(detalle.get("PRIPRO", 0))
 
             nuevo = {
-                "EERR": productos_ext.get(pronum, {}).get("EERR", ""),
-                "FECHA": fecchk,
+                "EERR": prod_ext.get("EERR", ""),
+                "FECHA": fecchk_str,
                 "N_TICKET": numchk,
                 "NOMBRES": cab.get("CUSNAM", ""),
                 "TIPO": cab.get("TYPPAG", ""),
-                "CANT": float(detalle.get("QTYPRO", 0)),
-                "P_UNIT": float(detalle.get("PRIPRO", 0)),
-                "CATEGORIA": productos_ext.get(pronum, {}).get("CATEGORIA", ""),
-                "SUB_CAT": productos_ext.get(pronum, {}).get("SUB_CAT", ""),
-                "COST_UNIT": obtener_costo_producto(pronum, productos),
+                "CANT": cant,
+                "P_UNIT": p_unit,
+                "CATEGORIA": prod_ext.get("CATEGORIA", ""),
+                "SUB_CAT": prod_ext.get("SUB_CAT", ""),
+                "COST_UNIT": cost_unit,
                 "PRONUM": pronum,
-                "DESCRI": productos_ext.get(pronum, {}).get("DESCRI", "")
+                "DESCRI": prod_ext.get("DESCRI", "")
             }
 
             nuevos_registros.append(nuevo)
