@@ -105,13 +105,13 @@ def home():
         "descargar": "/descargar/historico → Descarga el archivo DBF"
     }
 
+# ✅ LECTURA COMPLETA Y SIN ESPACIOS
 @app.get("/historico")
 def historico_json():
     try:
         if not os.path.exists(HISTORICO_DBF):
             return {"total": 0, "datos": []}
 
-        from dbf import Table
         table = Table(HISTORICO_DBF, codepage="cp850")
         table.open()
         registros = []
@@ -119,7 +119,10 @@ def historico_json():
         for rec in table:
             fila = {}
             for field in table.field_names:
-                fila[field] = rec[field]
+                valor = rec[field]
+                if isinstance(valor, str):
+                    valor = valor.strip()  # 🔥 Quita los espacios sobrantes
+                fila[field] = valor
             registros.append(fila)
 
         table.close()
@@ -127,7 +130,6 @@ def historico_json():
 
     except Exception as e:
         return {"error": str(e)}
-
 
 @app.get("/reporte")
 def generar_reporte():
@@ -160,7 +162,7 @@ def generar_reporte():
             if not cab:
                 continue
 
-            # ✅ FECHA SIEMPRE COMO TEXTO (tal cual llega)
+            # ✅ FECHA SIEMPRE COMO TEXTO
             fecchk_date = parsear_fecha(cab.get("FECCHK"))
             fecchk_str = str(fecchk_date) if fecchk_date else str(cab.get("FECCHK", "")).strip()
 
@@ -210,5 +212,4 @@ def descargar_historico():
         media_type="application/octet-stream",
         filename=HISTORICO_DBF
     )
-
 
