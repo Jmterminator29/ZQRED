@@ -168,7 +168,8 @@ def generar_reporte():
 
             prod_ext = productos_ext.get(pronum, {})
             cost_unit = obtener_costo_producto(pronum, productos)
-
+            producto = productos.get(pronum, {})
+            
             cant = float(detalle.get("QTYPRO", 0))
             p_unit = float(detalle.get("PRIPRO", 0))
 
