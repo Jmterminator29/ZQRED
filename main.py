@@ -79,13 +79,21 @@ def obtener_costo_producto(pronum, productos):
     return 0.0
 
 def parsear_fecha(fec):
+    """Soporta fechas en formato dd/mm/yy como 19/07/25 y otros."""
     if not fec:
         return None
     if isinstance(fec, datetime):
         return fec.date()
     if isinstance(fec, str):
         fec = fec.strip().replace(".", "-").replace("/", "-").replace(" ", "-")
-        for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%d-%m-%y", "%d/%m/%y", "%Y%m%d"):
+        formatos = [
+            "%Y-%m-%d",  # 2025-07-19
+            "%d-%m-%Y",  # 19-07-2025
+            "%Y%m%d",    # 20250719
+            "%d-%m-%y",  # 19-07-25
+            "%d/%m/%y"   # 19/07/25 ✅ ahora soportado
+        ]
+        for fmt in formatos:
             try:
                 return datetime.strptime(fec, fmt).date()
             except:
@@ -120,9 +128,9 @@ def home():
         "descargar": "/descargar/historico → Descarga el archivo DBF"
     }
 
-# ✅ CORREGIDO: FECHAS NORMALIZADAS
 @app.get("/historico")
 def historico_json():
+    """Devuelve TODO el histórico completo, no solo las actualizaciones."""
     try:
         if not os.path.exists(HISTORICO_DBF):
             return {"total": 0, "datos": []}
@@ -171,25 +179,19 @@ def generar_reporte():
 
             fecchk = parsear_fecha(cab.get("FECCHK"))
 
-            prod_ext = productos_ext.get(pronum, {})
-            cost_unit = obtener_costo_producto(pronum, productos)
-
-            cant = float(detalle.get("QTYPRO", 0))
-            p_unit = float(detalle.get("PRIPRO", 0))
-
             nuevo = {
-                "EERR": prod_ext.get("EERR", ""),
+                "EERR": productos_ext.get(pronum, {}).get("EERR", ""),
                 "FECHA": fecchk,
                 "N_TICKET": numchk,
                 "NOMBRES": cab.get("CUSNAM", ""),
                 "TIPO": cab.get("TYPPAG", ""),
-                "CANT": cant,
-                "P_UNIT": p_unit,
-                "CATEGORIA": prod_ext.get("CATEGORIA", ""),
-                "SUB_CAT": prod_ext.get("SUB_CAT", ""),
-                "COST_UNIT": cost_unit,
+                "CANT": float(detalle.get("QTYPRO", 0)),
+                "P_UNIT": float(detalle.get("PRIPRO", 0)),
+                "CATEGORIA": productos_ext.get(pronum, {}).get("CATEGORIA", ""),
+                "SUB_CAT": productos_ext.get(pronum, {}).get("SUB_CAT", ""),
+                "COST_UNIT": obtener_costo_producto(pronum, productos),
                 "PRONUM": pronum,
-                "DESCRI": prod_ext.get("DESCRI", "")
+                "DESCRI": productos_ext.get(pronum, {}).get("DESCRI", "")
             }
 
             nuevos_registros.append(nuevo)
@@ -217,4 +219,5 @@ def descargar_historico():
         media_type="application/octet-stream",
         filename=HISTORICO_DBF
     )
+
 
