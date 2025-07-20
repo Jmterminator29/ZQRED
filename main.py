@@ -184,7 +184,7 @@ def generar_reporte():
                 "SUB_CAT": prod_ext.get("SUB_CAT", ""),
                 "COST_UNIT": cost_unit,
                 "PRONUM": pronum,
-                "DESCRI": prod_ext.get("DESCRI", "")
+                "DESCRI": prod.get("DESCRI", "")
             }
 
             nuevos_registros.append(nuevo)
