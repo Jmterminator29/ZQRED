@@ -20,7 +20,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ✅ Servir HTML estático (opcional)
+# ✅ Servir HTML estático
 app.mount("/static", StaticFiles(directory="."), name="static")
 
 # ================================
@@ -149,12 +149,11 @@ def generar_reporte():
             if not cab:
                 continue
 
-            # ✅ FILTRAR SOLO FECHAS >= MARZO 2025
+            # ✅ FECHA TOLERANTE: si no se puede leer, se guarda igual
             fecchk_date = parsear_fecha(cab.get("FECCHK"))
-            if not fecchk_date or fecchk_date < fecha_inicio:
+            if fecchk_date and fecchk_date < fecha_inicio:
                 continue
 
-            # ✅ GUARDAR COMO TEXTO
             fecchk_str = str(fecchk_date) if fecchk_date else str(cab.get("FECCHK", "")).strip()
 
             prod_ext = productos_ext.get(pronum, {})
