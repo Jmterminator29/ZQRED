@@ -107,10 +107,28 @@ def home():
 
 @app.get("/historico")
 def historico_json():
-    if not os.path.exists(HISTORICO_DBF):
-        return {"total": 0, "datos": []}
-    datos = list(DBF(HISTORICO_DBF, load=True, encoding="cp850"))
-    return {"total": len(datos), "datos": datos}
+    try:
+        if not os.path.exists(HISTORICO_DBF):
+            return {"total": 0, "datos": []}
+
+        table = Table(HISTORICO_DBF, codepage="cp850")
+        table.open()
+        registros = []
+
+        for rec in table:
+            fila = {}
+            for field in table.field_names:
+                valor = rec[field]
+                if isinstance(valor, str):
+                    valor = valor.strip()  # ✅ Sin espacios
+                fila[field] = valor
+            registros.append(fila)
+
+        table.close()
+        return {"total": len(registros), "datos": registros}
+
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/reporte")
 def generar_reporte():
@@ -143,12 +161,11 @@ def generar_reporte():
             if not cab:
                 continue
 
-            # ✅ FECHA SIEMPRE COMO TEXTO
             fecchk_date = parsear_fecha(cab.get("FECCHK"))
             fecchk_str = str(fecchk_date) if fecchk_date else str(cab.get("FECCHK", "")).strip()
 
             prod_ext = productos_ext.get(pronum, {})
-            producto = productos.get(pronum, {})  # ✅ Para DESCRI correcto
+            producto = productos.get(pronum, {})
 
             cost_unit = obtener_costo_producto(pronum, productos)
             cant = float(detalle.get("QTYPRO", 0))
@@ -166,7 +183,7 @@ def generar_reporte():
                 "SUB_CAT": prod_ext.get("SUB_CAT", ""),
                 "COST_UNIT": cost_unit,
                 "PRONUM": pronum,
-                "DESCRI": producto.get("DESCRI", "")  # ✅ AHORA DESDE ZETH70
+                "DESCRI": producto.get("DESCRI", "")
             }
 
             nuevos_registros.append(nuevo)
