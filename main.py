@@ -29,6 +29,7 @@ ZETH70 = "ZETH70.DBF"
 ZETH70_EXT = "ZETH70_EXT.DBF"
 HISTORICO_DBF = "VENTAS_HISTORICO.DBF"
 
+# ✅ Estructura original, sin nuevos campos
 CAMPOS_HISTORICO = (
     "EERR C(20);"
     "FECHA C(20);"
@@ -93,7 +94,8 @@ def parsear_fecha(fec):
                 continue
     return None
 
-def agrupar_registros(registros):
+def agrupar_registros_visual(registros):
+    """ ✅ SOLO PARA MOSTRAR EN /historico (NO se guarda) """
     agrupados = defaultdict(lambda: {
         "CANT": 0,
         "IMPORTE": 0,
@@ -123,7 +125,7 @@ def agrupar_registros(registros):
 def home():
     return {
         "mensaje": "✅ API ZQRED funcionando correctamente",
-        "usar_endpoint": "/historico → Devuelve datos guardados",
+        "usar_endpoint": "/historico → Devuelve datos guardados (sin duplicados)",
         "actualizar": "/reporte → Actualiza el histórico",
         "descargar": "/descargar/historico → Descarga el archivo DBF"
     }
@@ -143,11 +145,12 @@ def historico_json():
                 valor = rec[field]
                 if isinstance(valor, str):
                     valor = valor.strip()
-                fila[field] = valor or 0  # ✅ reemplaza None por 0 o ""
+                fila[field] = valor or 0
             registros.append(fila)
         table.close()
 
-        datos_agrupados = agrupar_registros(registros)
+        # ✅ AGRUPAMOS SOLO PARA MOSTRAR
+        datos_agrupados = agrupar_registros_visual(registros)
         return {"total": len(datos_agrupados), "datos": datos_agrupados}
 
     except Exception as e:
@@ -211,8 +214,8 @@ def generar_reporte():
             nuevos_registros.append(nuevo)
 
         if nuevos_registros:
-            registros_agrupados = agrupar_registros(nuevos_registros)
-            agregar_al_historico(registros_agrupados)
+            # ✅ GUARDAMOS SOLO CAMPOS ORIGINALES, SIN AGRUPAR
+            agregar_al_historico(nuevos_registros)
 
         total_acumulado = len(DBF(HISTORICO_DBF, load=True, encoding="cp850"))
 
@@ -233,6 +236,8 @@ def descargar_historico():
         HISTORICO_DBF,
         media_type="application/octet-stream",
         filename=HISTORICO_DBF
+    )
+
     )
 
 
