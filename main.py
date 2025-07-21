@@ -225,7 +225,7 @@ def generar_reporte():
             "nuevos": nuevos_registros
         }
 
-    except Exception as e:
+        except Exception as e:
         return {"error": str(e)}
 
 @app.get("/descargar/historico")
@@ -238,6 +238,5 @@ def descargar_historico():
         filename=HISTORICO_DBF
     )
 
-    )
 
 
