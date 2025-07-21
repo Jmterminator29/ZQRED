@@ -4,6 +4,7 @@ from fastapi.responses import FileResponse
 from dbfread import DBF
 from dbf import Table, READ_WRITE
 from datetime import datetime
+from collections import defaultdict
 import os
 
 # ================================
@@ -28,10 +29,9 @@ ZETH70 = "ZETH70.DBF"
 ZETH70_EXT = "ZETH70_EXT.DBF"
 HISTORICO_DBF = "VENTAS_HISTORICO.DBF"
 
-# ✅ FECHA COMO TEXTO PARA EVITAR NULL
 CAMPOS_HISTORICO = (
     "EERR C(20);"
-    "FECHA C(20);"  # <-- TEXTO, NUNCA NULL
+    "FECHA C(20);"
     "N_TICKET C(10);"
     "NOMBRES C(50);"
     "TIPO C(5);"
@@ -76,7 +76,7 @@ def agregar_al_historico(nuevos_registros):
 def obtener_costo_producto(pronum, productos):
     producto = productos.get(pronum)
     if producto:
-        return float(producto.get("ULCOSREP", 0.0))
+        return float(producto.get("ULCOSREP") or 0.0)
     return 0.0
 
 def parsear_fecha(fec):
@@ -92,6 +92,29 @@ def parsear_fecha(fec):
             except:
                 continue
     return None
+
+def agrupar_registros(registros):
+    agrupados = defaultdict(lambda: {
+        "CANT": 0,
+        "IMPORTE": 0,
+        "COST_IMP": 0,
+        "MB": 0
+    })
+    resultado = []
+    for r in registros:
+        key = (r["N_TICKET"], r["PRONUM"])
+        cant = float(r.get("CANT") or 0)
+        p_unit = float(r.get("P_UNIT") or 0)
+        cost_unit = float(r.get("COST_UNIT") or 0)
+        if key not in agrupados:
+            agrupados[key].update(r)
+        agrupados[key]["CANT"] += cant
+        agrupados[key]["IMPORTE"] += cant * p_unit
+        agrupados[key]["COST_IMP"] += cant * cost_unit
+        agrupados[key]["MB"] += (p_unit - cost_unit) * cant
+    for val in agrupados.values():
+        resultado.append(val)
+    return resultado
 
 # ================================
 # ENDPOINTS
@@ -114,18 +137,18 @@ def historico_json():
         table = Table(HISTORICO_DBF, codepage="cp850")
         table.open()
         registros = []
-
         for rec in table:
             fila = {}
             for field in table.field_names:
                 valor = rec[field]
                 if isinstance(valor, str):
-                    valor = valor.strip()  # ✅ Sin espacios
-                fila[field] = valor
+                    valor = valor.strip()
+                fila[field] = valor or 0  # ✅ reemplaza None por 0 o ""
             registros.append(fila)
-
         table.close()
-        return {"total": len(registros), "datos": registros}
+
+        datos_agrupados = agrupar_registros(registros)
+        return {"total": len(datos_agrupados), "datos": datos_agrupados}
 
     except Exception as e:
         return {"error": str(e)}
@@ -149,10 +172,9 @@ def generar_reporte():
         cabeceras = {r["NUMCHK"]: r for r in DBF(ZETH50T, load=True, encoding="cp850")}
 
         nuevos_registros = []
-
         for detalle in DBF(ZETH51T, encoding="cp850"):
-            numchk = str(detalle.get("NUMCHK", "")).strip()
-            pronum = str(detalle.get("PRONUM", "")).strip()
+            numchk = str(detalle.get("NUMCHK") or "").strip()
+            pronum = str(detalle.get("PRONUM") or "").strip()
 
             if (numchk, pronum) in registros_existentes:
                 continue
@@ -162,14 +184,14 @@ def generar_reporte():
                 continue
 
             fecchk_date = parsear_fecha(cab.get("FECCHK"))
-            fecchk_str = str(fecchk_date) if fecchk_date else str(cab.get("FECCHK", "")).strip()
+            fecchk_str = str(fecchk_date) if fecchk_date else str(cab.get("FECCHK") or "").strip()
 
             prod_ext = productos_ext.get(pronum, {})
             producto = productos.get(pronum, {})
 
-            cost_unit = obtener_costo_producto(pronum, productos)
-            cant = float(detalle.get("QTYPRO", 0))
-            p_unit = float(detalle.get("PRIPRO", 0))
+            cost_unit = float(obtener_costo_producto(pronum, productos) or 0)
+            cant = float(detalle.get("QTYPRO") or 0)
+            p_unit = float(detalle.get("PRIPRO") or 0)
 
             nuevo = {
                 "EERR": prod_ext.get("EERR", ""),
@@ -189,7 +211,8 @@ def generar_reporte():
             nuevos_registros.append(nuevo)
 
         if nuevos_registros:
-            agregar_al_historico(nuevos_registros)
+            registros_agrupados = agrupar_registros(nuevos_registros)
+            agregar_al_historico(registros_agrupados)
 
         total_acumulado = len(DBF(HISTORICO_DBF, load=True, encoding="cp850"))
 
