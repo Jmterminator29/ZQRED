@@ -4,11 +4,10 @@ from fastapi.responses import FileResponse
 from dbfread import DBF
 from dbf import Table, READ_WRITE
 from datetime import datetime
-from collections import defaultdict
 import os
 
 # ================================
-# CONFIGURATION FASTAPI
+# CONFIGURACIÓN FASTAPI
 # ================================
 app = FastAPI()
 
@@ -21,7 +20,7 @@ app.add_middleware(
 )
 
 # ================================
-# FILES DBF
+# ARCHIVOS DBF
 # ================================
 ZETH50T = "ZETH50T.DBF"
 ZETH51T = "ZETH51T.DBF"
@@ -45,7 +44,7 @@ CAMPOS_HISTORICO = (
 )
 
 # ================================
-# UTILS
+# FUNCIONES AUXILIARES
 # ================================
 def limpiar_texto(valor):
     if isinstance(valor, str):
@@ -57,7 +56,7 @@ def crear_dbf_historico():
         table = Table(HISTORICO_DBF, CAMPOS_HISTORICO, codepage="cp850")
         table.open(mode=READ_WRITE)
         table.close()
-        print("✅ VENTAS_HISTORICO.DBF created.")
+        print("✅ VENTAS_HISTORICO.DBF creado.")
 
 def leer_dbf_existente():
     if not os.path.exists(HISTORICO_DBF):
@@ -94,28 +93,14 @@ def parsear_fecha(fec):
     return None
 
 def agrupar_registros_visual(registros):
-    """ONLY FOR VISUALIZATION IN /historico (NOT SAVED)"""
-    agrupados = defaultdict(lambda: {
-        "CANT": 0,
-        "IMPORTE": 0,
-        "COST_IMP": 0,
-        "MB": 0
-    })
-    resultado = []
+    """✅ Devuelve los registros tal cual + EERR_CONC (sin cálculos adicionales)."""
+    agrupados = []
     for r in registros:
-        key = (r["N_TICKET"], r["PRONUM"])
-        cant = float(r.get("CANT") or 0)
-        p_unit = float(r.get("P_UNIT") or 0)
-        cost_unit = float(r.get("COST_UNIT") or 0)
-        if key not in agrupados:
-            agrupados[key].update(r)
-        agrupados[key]["CANT"] += cant
-        agrupados[key]["IMPORTE"] += cant * p_unit
-        agrupados[key]["COST_IMP"] += cant * cost_unit
-        agrupados[key]["MB"] += (p_unit - cost_unit) * cant
-    for val in agrupados.values():
-        resultado.append(val)
-    return resultado
+        fila = dict(r)
+        tipo = fila.get("TIPO", "").strip()
+        fila["EERR_CONC"] = "CUENTAS x COBRAR" if tipo == "C" else "VENTAS al CONTADO"
+        agrupados.append(fila)
+    return agrupados
 
 # ================================
 # ENDPOINTS
@@ -123,14 +108,15 @@ def agrupar_registros_visual(registros):
 @app.get("/")
 def home():
     return {
-        "mensaje": "✅ API ZQRED running",
-        "use": "/historico → get grouped data",
-        "update": "/reporte → update historical DBF",
-        "download": "/descargar/historico → download DBF file"
+        "mensaje": "✅ API ZQRED funcionando correctamente",
+        "usar_endpoint": "/historico → Devuelve datos agrupados",
+        "actualizar": "/reporte → Actualiza el histórico",
+        "descargar": "/descargar/historico → Descarga el archivo DBF"
     }
 
 @app.get("/historico")
 def historico_json():
+    """✅ Lee el DBF, no duplica nada, solo agrega EERR_CONC."""
     try:
         if not os.path.exists(HISTORICO_DBF):
             return {"total": 0, "datos": []}
@@ -156,10 +142,11 @@ def historico_json():
 
 @app.get("/reporte")
 def generar_reporte():
+    """✅ Genera y actualiza el histórico, sin duplicar tickets."""
     try:
         for archivo in [ZETH50T, ZETH51T, ZETH70]:
             if not os.path.exists(archivo):
-                return {"error": f"Missing file {archivo}"}
+                return {"error": f"No se encontró {archivo}"}
 
         crear_dbf_historico()
         registros_existentes = leer_dbf_existente()
@@ -228,12 +215,11 @@ def generar_reporte():
 @app.get("/descargar/historico")
 def descargar_historico():
     if not os.path.exists(HISTORICO_DBF):
-        return {"error": "Historical file not created yet."}
+        return {"error": "El archivo histórico aún no existe."}
     return FileResponse(
         HISTORICO_DBF,
         media_type="application/octet-stream",
         filename=HISTORICO_DBF
     )
-
 
 
