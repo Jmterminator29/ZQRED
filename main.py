@@ -8,7 +8,7 @@ from collections import defaultdict
 import os
 
 # ================================
-# CONFIGURACIÓN FASTAPI
+# CONFIGURATION FASTAPI
 # ================================
 app = FastAPI()
 
@@ -21,7 +21,7 @@ app.add_middleware(
 )
 
 # ================================
-# ARCHIVOS DBF
+# FILES DBF
 # ================================
 ZETH50T = "ZETH50T.DBF"
 ZETH51T = "ZETH51T.DBF"
@@ -29,7 +29,6 @@ ZETH70 = "ZETH70.DBF"
 ZETH70_EXT = "ZETH70_EXT.DBF"
 HISTORICO_DBF = "VENTAS_HISTORICO.DBF"
 
-# ✅ Estructura original, sin nuevos campos
 CAMPOS_HISTORICO = (
     "EERR C(20);"
     "FECHA C(20);"
@@ -46,7 +45,7 @@ CAMPOS_HISTORICO = (
 )
 
 # ================================
-# FUNCIONES AUXILIARES
+# UTILS
 # ================================
 def limpiar_texto(valor):
     if isinstance(valor, str):
@@ -58,7 +57,7 @@ def crear_dbf_historico():
         table = Table(HISTORICO_DBF, CAMPOS_HISTORICO, codepage="cp850")
         table.open(mode=READ_WRITE)
         table.close()
-        print("✅ VENTAS_HISTORICO.DBF creado.")
+        print("✅ VENTAS_HISTORICO.DBF created.")
 
 def leer_dbf_existente():
     if not os.path.exists(HISTORICO_DBF):
@@ -95,7 +94,7 @@ def parsear_fecha(fec):
     return None
 
 def agrupar_registros_visual(registros):
-    """ ✅ SOLO PARA MOSTRAR EN /historico (NO se guarda) """
+    """ONLY FOR VISUALIZATION IN /historico (NOT SAVED)"""
     agrupados = defaultdict(lambda: {
         "CANT": 0,
         "IMPORTE": 0,
@@ -124,10 +123,10 @@ def agrupar_registros_visual(registros):
 @app.get("/")
 def home():
     return {
-        "mensaje": "✅ API ZQRED funcionando correctamente",
-        "usar_endpoint": "/historico → Devuelve datos guardados (sin duplicados)",
-        "actualizar": "/reporte → Actualiza el histórico",
-        "descargar": "/descargar/historico → Descarga el archivo DBF"
+        "mensaje": "✅ API ZQRED running",
+        "use": "/historico → get grouped data",
+        "update": "/reporte → update historical DBF",
+        "download": "/descargar/historico → download DBF file"
     }
 
 @app.get("/historico")
@@ -149,7 +148,6 @@ def historico_json():
             registros.append(fila)
         table.close()
 
-        # ✅ AGRUPAMOS SOLO PARA MOSTRAR
         datos_agrupados = agrupar_registros_visual(registros)
         return {"total": len(datos_agrupados), "datos": datos_agrupados}
 
@@ -161,7 +159,7 @@ def generar_reporte():
     try:
         for archivo in [ZETH50T, ZETH51T, ZETH70]:
             if not os.path.exists(archivo):
-                return {"error": f"No se encontró {archivo}"}
+                return {"error": f"Missing file {archivo}"}
 
         crear_dbf_historico()
         registros_existentes = leer_dbf_existente()
@@ -214,7 +212,6 @@ def generar_reporte():
             nuevos_registros.append(nuevo)
 
         if nuevos_registros:
-            # ✅ GUARDAMOS SOLO CAMPOS ORIGINALES, SIN AGRUPAR
             agregar_al_historico(nuevos_registros)
 
         total_acumulado = len(DBF(HISTORICO_DBF, load=True, encoding="cp850"))
@@ -225,13 +222,13 @@ def generar_reporte():
             "nuevos": nuevos_registros
         }
 
-        except Exception as e:
+    except Exception as e:
         return {"error": str(e)}
 
 @app.get("/descargar/historico")
 def descargar_historico():
     if not os.path.exists(HISTORICO_DBF):
-        return {"error": "El archivo histórico aún no existe."}
+        return {"error": "Historical file not created yet."}
     return FileResponse(
         HISTORICO_DBF,
         media_type="application/octet-stream",
