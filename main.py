@@ -6,9 +6,6 @@ from dbf import Table, READ_WRITE
 from datetime import datetime
 import os
 
-# ================================
-# CONFIGURACIÓN FASTAPI
-# ================================
 app = FastAPI()
 
 app.add_middleware(
@@ -19,9 +16,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ================================
-# ARCHIVOS DBF
-# ================================
 ZETH50T = "ZETH50T.DBF"
 ZETH51T = "ZETH51T.DBF"
 ZETH70 = "ZETH70.DBF"
@@ -43,9 +37,6 @@ CAMPOS_HISTORICO = (
     "DESCRI C(50)"
 )
 
-# ================================
-# FUNCIONES AUXILIARES
-# ================================
 def limpiar_texto(valor):
     if isinstance(valor, str):
         return valor.encode("cp850", errors="replace").decode("cp850")
@@ -61,7 +52,10 @@ def crear_dbf_historico():
 def leer_dbf_existente():
     if not os.path.exists(HISTORICO_DBF):
         return set()
-    return {(r["N_TICKET"], r["PRONUM"]) for r in DBF(HISTORICO_DBF, load=True, encoding="cp850")}
+    return {
+        (str(r["N_TICKET"]).strip().upper(), str(r["PRONUM"]).strip().upper())
+        for r in DBF(HISTORICO_DBF, load=True, encoding="cp850")
+    }
 
 def agregar_al_historico(nuevos_registros):
     table = Table(HISTORICO_DBF, codepage="cp850")
@@ -93,7 +87,6 @@ def parsear_fecha(fec):
     return None
 
 def agrupar_registros_visual(registros):
-    """✅ Devuelve los registros tal cual + EERR_CONC (sin cálculos adicionales)."""
     agrupados = []
     for r in registros:
         fila = dict(r)
@@ -102,25 +95,20 @@ def agrupar_registros_visual(registros):
         agrupados.append(fila)
     return agrupados
 
-# ================================
-# ENDPOINTS
-# ================================
 @app.get("/")
 def home():
     return {
         "mensaje": "✅ API ZQRED funcionando correctamente",
-        "usar_endpoint": "/historico → Devuelve datos agrupados",
-        "actualizar": "/reporte → Actualiza el histórico",
-        "descargar": "/descargar/historico → Descarga el archivo DBF"
+        "usar_endpoint": "/historico → Devuelve datos",
+        "actualizar": "/reporte → Actualiza histórico sin duplicados",
+        "descargar": "/descargar/historico → Descarga el DBF"
     }
 
 @app.get("/historico")
 def historico_json():
-    """✅ Lee el DBF, no duplica nada, solo agrega EERR_CONC."""
     try:
         if not os.path.exists(HISTORICO_DBF):
             return {"total": 0, "datos": []}
-
         table = Table(HISTORICO_DBF, codepage="cp850")
         table.open()
         registros = []
@@ -133,24 +121,19 @@ def historico_json():
                 fila[field] = valor or 0
             registros.append(fila)
         table.close()
-
         datos_agrupados = agrupar_registros_visual(registros)
         return {"total": len(datos_agrupados), "datos": datos_agrupados}
-
     except Exception as e:
         return {"error": str(e)}
 
 @app.get("/reporte")
 def generar_reporte():
-    """✅ Genera y actualiza el histórico, sin duplicar tickets."""
     try:
         for archivo in [ZETH50T, ZETH51T, ZETH70]:
             if not os.path.exists(archivo):
                 return {"error": f"No se encontró {archivo}"}
 
         crear_dbf_historico()
-        registros_existentes = leer_dbf_existente()
-
         productos = {r["PRONUM"]: r for r in DBF(ZETH70, load=True, encoding="cp850")}
         productos_ext = (
             {r["PRONUM"]: r for r in DBF(ZETH70_EXT, load=True, encoding="cp850")}
@@ -161,10 +144,11 @@ def generar_reporte():
 
         nuevos_registros = []
         for detalle in DBF(ZETH51T, encoding="cp850"):
-            numchk = str(detalle.get("NUMCHK") or "").strip()
-            pronum = str(detalle.get("PRONUM") or "").strip()
+            numchk = str(detalle.get("NUMCHK") or "").strip().upper()
+            pronum = str(detalle.get("PRONUM") or "").strip().upper()
 
-            if (numchk, pronum) in registros_existentes:
+            if (numchk, pronum) in leer_dbf_existente():
+                print(f"⛔ YA EXISTE → Ticket: {numchk}, PRONUM: {pronum}")
                 continue
 
             cab = cabeceras.get(numchk)
@@ -196,19 +180,18 @@ def generar_reporte():
                 "DESCRI": producto.get("DESCRI", "")
             }
 
+            print(f"➕ AGREGADO → Ticket: {numchk}, PRONUM: {pronum}")
             nuevos_registros.append(nuevo)
 
         if nuevos_registros:
             agregar_al_historico(nuevos_registros)
 
         total_acumulado = len(DBF(HISTORICO_DBF, load=True, encoding="cp850"))
-
         return {
             "nuevos_agregados": len(nuevos_registros),
             "total_historico": total_acumulado,
             "nuevos": nuevos_registros
         }
-
     except Exception as e:
         return {"error": str(e)}
 
@@ -221,5 +204,6 @@ def descargar_historico():
         media_type="application/octet-stream",
         filename=HISTORICO_DBF
     )
+
 
 
